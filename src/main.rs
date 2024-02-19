@@ -2,11 +2,14 @@ use bevy::{
     prelude::*,
     math::*,
     sprite::MaterialMesh2dBundle,
-    math::bounding::{Aabb2d, BoundingCircle, BoundingVolume, IntersectsVolume},
-}
+    math::bounding::{Aabb2d, IntersectsVolume},
+};
 
 const BALL_SPEED: f32 = 5.;
 const BALL_SIZE: f32 = 5.;
+
+#[derive(Component)]
+struct Shape(Vec2);
 
 #[derive(Component)]
 struct Velocity(Vec2);
@@ -46,27 +49,36 @@ struct Paddle;
 #[derive(Bundle)]
 struct PaddleBundle {
     paddle: Paddle,
+    shape: Shape,
     position: Position,
+    velocity: Velocity,
 }
 
 impl PaddleBundle {
     fn new(x: f32, y: f32) -> Self {
         Self {
             paddle: Paddle,
+            shape: Shape(Vec2::new(PADDLE_WIDTH, PADDLE_HEIGHT)),
             position: Position(Vec2::new(x, y)),
+            velocity: Velocity(Vec2::new(0., 0.)),
         }
     }
 }
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, (
             spawn_ball,
+            spawn_paddles,
             spawn_camera,
-            spawn_paddles
         ))
-        .add_systems(Update, move_ball)
+        .add_systems(
+            Update,
+            (
+                move_ball,
+                project_positions.after(move_ball)
+            ),
+        )
         .run();
 }
 
@@ -102,28 +114,64 @@ fn spawn_paddles(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    window: Query<&Window>,
 ) {
     println!("Spawning paddles...");
 
-    let mesh = Mesh::from(Rectangle::new(PADDLE_WIDTH, PADDLE_HEIGHT));
-    let material = ColorMaterial::from(Color::rgb(0., 1., 0.));
+    if let Ok(window) = window.get_single() {
+        let window_width = window.resolution.width();
 
-    let mesh_handle = meshes.add(mesh);
-    let material_handle = materials.add(material);
+        let padding = 50.;
+        let right_paddle_x = window_width / 2. - padding;
+        let left_paddle_x = -window_width / 2. + padding;
 
-    commands.spawn((
-        PaddleBundle::new(20., -25.),
-        MaterialMesh2dBundle {
-            mesh: mesh_handle.into(),
-            material: material_handle,
-            ..default()
-        },
-    ));
+        let mesh = Mesh::from(Rectangle::new(PADDLE_WIDTH, PADDLE_HEIGHT));
+        let mesh_handle = meshes.add(mesh);
+
+        let right_paddle_material = ColorMaterial::from(Color::rgb(0., 1., 0.));
+        let left_paddle_material = ColorMaterial::from(Color::rgb(0., 0., 1.));
+
+        commands.spawn((
+            PaddleBundle::new(right_paddle_x, 0.),
+            MaterialMesh2dBundle {
+                mesh: mesh_handle.clone().into(),
+                material: materials.add(right_paddle_material),
+                ..default()
+            },
+        ));
+
+        commands.spawn((
+            PaddleBundle::new(left_paddle_x, 0.),
+            MaterialMesh2dBundle {
+                mesh: mesh_handle.into(),
+                material: materials.add(left_paddle_material),
+                ..default()
+            },
+        ));
+    }
 }
 
 fn move_ball(mut ball: Query<(&mut Position, &Velocity), With<Ball>>) {
     if let Ok((mut position, velocity)) = ball.get_single_mut() {
         position.0 += velocity.0
+    }
+}
+
+fn handle_collisions(
+    mut ball: Query<(&Position, &mut Velocity), With<Ball>>,
+    others: Query<(&Position, &Shape), Without<Ball>>,
+) {
+    if let Ok((mut ball_velocity, ball_position, ball_shape)) = ball.get_single_mut() {
+        for (position, shape) in &others {
+            if let Some(collision) = Aabb2d::new(ball_position.0.extend(0.).truncate(), ball_shape.0 / 2.)
+            .intersects(&Aabb2d::new(position.0.extend.truncate(), shape / 2.)) {
+                let normal = collision.normal;
+                let velocity = ball_velocity.0;
+                let dot = velocity.dot(normal);
+                ball_velocity.0 = velocity - 2. * dot * normal;
+            }
+        }
+    
     }
 }
 
