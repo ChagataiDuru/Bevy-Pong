@@ -50,8 +50,8 @@ struct Paddle;
 struct PaddleBundle {
     paddle: Paddle,
     shape: Shape,
-    position: Position,
     velocity: Velocity,
+    position: Position,
 }
 
 impl PaddleBundle {
@@ -76,7 +76,8 @@ fn main() {
             Update,
             (
                 move_ball,
-                project_positions.after(move_ball)
+                project_positions.after(move_ball),
+                handle_collisions.after(move_ball)
             ),
         )
         .run();
@@ -158,20 +159,17 @@ fn move_ball(mut ball: Query<(&mut Position, &Velocity), With<Ball>>) {
 }
 
 fn handle_collisions(
-    mut ball: Query<(&Position, &mut Velocity), With<Ball>>,
+    mut ball: Query<(&mut Velocity, &Position, &Shape), With<Ball>>,
     others: Query<(&Position, &Shape), Without<Ball>>,
 ) {
     if let Ok((mut ball_velocity, ball_position, ball_shape)) = ball.get_single_mut() {
         for (position, shape) in &others {
-            if let Some(collision) = Aabb2d::new(ball_position.0.extend(0.).truncate(), ball_shape.0 / 2.)
-            .intersects(&Aabb2d::new(position.0.extend.truncate(), shape / 2.)) {
-                let normal = collision.normal;
-                let velocity = ball_velocity.0;
-                let dot = velocity.dot(normal);
-                ball_velocity.0 = velocity - 2. * dot * normal;
+            let collision = Aabb2d::new(ball_position.0.extend(0.).truncate(), ball_shape.0)
+                .intersects(&Aabb2d::new(position.0.extend(0.).truncate(), shape.0));
+            if collision {
+                ball_velocity.0.x *= -1.;
             }
         }
-    
     }
 }
 
