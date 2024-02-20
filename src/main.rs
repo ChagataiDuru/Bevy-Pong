@@ -68,6 +68,20 @@ impl PaddleBundle {
     }
 }
 
+enum Scorer {
+    Ai,
+    Player
+}
+
+#[derive(Event)]
+struct Scored(Scorer);
+
+#[derive(Resource, Default)]
+struct Score {
+    player: u32,
+    ai: u32,
+}
+
 const GUTTER_HEIGHT: f32 = 20.;
 
 #[derive(Component)]
@@ -93,6 +107,8 @@ impl GutterBundle {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .init_resource::<Score>()
+        .add_event::<Scored>()
         .add_systems(
             Startup,
             (spawn_ball, spawn_camera, spawn_paddles, spawn_gutters),
@@ -101,6 +117,11 @@ fn main() {
             Update,
             (
                 move_ball,
+                handle_player_input,
+                detect_scoring,
+                reset_ball.after(detect_scoring),
+                update_score.after(detect_scoring),
+                move_paddles.after(handle_player_input),
                 project_positions.after(move_ball),
                 handle_collisions.after(move_ball),
             ),
@@ -271,6 +292,57 @@ fn handle_collisions(
             }
         }
     }
+}
+
+fn detect_scoring(
+    mut ball: Query<&mut Position, With<Ball>>,
+    window: Query<&Window>,
+    mut events: EventWriter<Scored>,
+) {
+    if let Ok(window) = window.get_single() {
+        let window_width = window.resolution.width();
+
+        if let Ok(ball) = ball.get_single_mut() {
+            // Here we write the events using our EventWriter
+            if ball.0.x > window_width / 2. {
+                events.send(Scored(Scorer::Ai));
+            } else if ball.0.x < -window_width / 2. {
+                events.send(Scored(Scorer::Player));
+            }
+        }
+    }
+}
+
+fn reset_ball(
+    mut ball: Query<(&mut Position, &mut Velocity), With<Ball>>,
+    mut events: EventReader<Scored>,
+) {
+    // Here we read the events using an EventReader
+    for event in events.iter() {
+        if let Ok((mut position, mut velocity)) = ball.get_single_mut() {
+            match event.0 {
+                Scorer::Ai => {
+                    position.0 = Vec2::new(0., 0.);
+                    velocity.0 = Vec2::new(-1., 1.);
+                }
+                Scorer::Player => {
+                    position.0 = Vec2::new(0., 0.);
+                    velocity.0 = Vec2::new(1., 1.);
+                }
+            }
+        }
+    }
+}
+
+fn update_score(mut score: ResMut<Score>, mut events: EventReader<Scored>) {
+    for event in events.iter() {
+        match event.0 {
+            Scorer::Ai => score.ai += 1,
+            Scorer::Player => score.player += 1,
+        }
+    }
+
+    println!("Score: {} - {}", score.player, score.ai);
 }
 
 fn project_positions(
