@@ -9,6 +9,9 @@ const BALL_SPEED: f32 = 5.;
 const BALL_SIZE: f32 = 5.;
 
 #[derive(Component)]
+struct Player;
+
+#[derive(Component)]
 struct Shape(Vec2);
 
 #[derive(Component)]
@@ -105,6 +108,21 @@ fn main() {
         .run();
 }
 
+fn handle_player_input(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut paddle: Query<&mut Velocity, With<Player>>,
+) {
+    if let Ok(mut velocity) = paddle.get_single_mut() {
+        if keyboard_input.pressed(KeyCode::ArrowUp) {
+            velocity.0.y = 1.;
+        } else if keyboard_input.pressed(KeyCode::ArrowDown) {
+            velocity.0.y = -1.;
+        } else {
+            velocity.0.y = 0.;
+        }
+    }
+}
+
 fn spawn_camera(mut commands: Commands) {
     commands.spawn_empty()
             .insert(Camera2dBundle::default());
@@ -161,6 +179,7 @@ fn spawn_paddles(
                 material: materials.add(right_paddle_material),
                 ..default()
             },
+            Player,
         ));
 
         commands.spawn((
@@ -220,6 +239,22 @@ fn spawn_gutters(
 fn move_ball(mut ball: Query<(&mut Position, &Velocity), With<Ball>>) {
     if let Ok((mut position, velocity)) = ball.get_single_mut() {
         position.0 += velocity.0
+    }
+}
+
+fn move_paddles(
+    mut paddle: Query<(&mut Position, &Velocity), With<Paddle>>,
+    window: Query<&Window>,
+) {
+    if let Ok(window) = window.get_single() {
+        let window_height = window.resolution.height();
+
+        for (mut position, velocity) in &mut paddle {
+            let new_position = position.0 + velocity.0 * PADDLE_SPEED;
+            if new_position.y.abs() < window_height / 2. - GUTTER_HEIGHT - PADDLE_HEIGHT / 2. {
+                position.0 = new_position;
+            }
+        }
     }
 }
 
