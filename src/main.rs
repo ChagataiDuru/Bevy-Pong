@@ -64,20 +64,42 @@ impl PaddleBundle {
         }
     }
 }
+
+const GUTTER_HEIGHT: f32 = 20.;
+
+#[derive(Component)]
+struct Gutter;
+
+#[derive(Bundle)]
+struct GutterBundle {
+    gutter: Gutter,
+    shape: Shape,
+    position: Position,
+}
+
+impl GutterBundle {
+    fn new(x: f32, y: f32, width: f32) -> Self {
+        Self {
+            gutter: Gutter,
+            shape: Shape(Vec2::new(width, GUTTER_HEIGHT)),
+            position: Position(Vec2::new(x, y)),
+        }
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, (
-            spawn_ball,
-            spawn_paddles,
-            spawn_camera,
-        ))
+        .add_systems(
+            Startup,
+            (spawn_ball, spawn_camera, spawn_paddles, spawn_gutters),
+        )
         .add_systems(
             Update,
             (
                 move_ball,
                 project_positions.after(move_ball),
-                handle_collisions.after(move_ball)
+                handle_collisions.after(move_ball),
             ),
         )
         .run();
@@ -146,6 +168,49 @@ fn spawn_paddles(
             MaterialMesh2dBundle {
                 mesh: mesh_handle.into(),
                 material: materials.add(left_paddle_material),
+                ..default()
+            },
+        ));
+    }
+}
+
+fn spawn_gutters(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    window: Query<&Window>,
+) {
+    if let Ok(window) = window.get_single() {
+        let window_width = window.resolution.width();
+        let window_height = window.resolution.height();
+
+        let top_gutter_y = window_height / 2. - GUTTER_HEIGHT / 2.;
+        let bottom_gutter_y = -window_height / 2. + GUTTER_HEIGHT / 2.;
+
+        let top_gutter = GutterBundle::new(0., top_gutter_y, window_width);
+        let bottom_gutter = GutterBundle::new(0., bottom_gutter_y, window_width);
+
+        let mesh = Mesh::from(Rectangle::new(top_gutter.shape.0.x, bottom_gutter.shape.0.y));
+        let material = ColorMaterial::from(Color::rgb(0., 0., 0.));
+
+        // Sharing same mesh and material between top and bottom gutter (wow)
+        let mesh_handle = meshes.add(mesh);
+        let material_handle = materials.add(material);
+
+        commands.spawn((
+            top_gutter,
+            MaterialMesh2dBundle {
+                mesh: mesh_handle.clone().into(),
+                material: material_handle.clone(),
+                ..default()
+            },
+        ));
+
+        commands.spawn((
+            bottom_gutter,
+            MaterialMesh2dBundle {
+                mesh: mesh_handle.into(),
+                material: material_handle.clone(),
                 ..default()
             },
         ));
