@@ -104,6 +104,28 @@ impl GutterBundle {
     }
 }
 
+#[derive(Component)]
+struct PlayerScoreboard;
+
+#[derive(Component)]
+struct AiScoreboard;
+
+fn update_scoreboard(
+    mut player_score: Query<&mut Text, With<PlayerScoreboard>>,
+    mut ai_score: Query<&mut Text, (With<AiScoreboard>, Without<PlayerScoreboard>)>,
+    score: Res<Score>,
+) {
+    if score.is_changed() {
+        if let Ok(mut player_score) = player_score.get_single_mut() {
+            player_score.sections[0].value = score.player.to_string();
+        }
+
+        if let Ok(mut ai_score) = ai_score.get_single_mut() {
+            ai_score.sections[0].value = score.ai.to_string();
+        }
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -111,7 +133,7 @@ fn main() {
         .add_event::<Scored>()
         .add_systems(
             Startup,
-            (spawn_ball, spawn_camera, spawn_paddles, spawn_gutters),
+            (spawn_ball, spawn_camera, spawn_paddles, spawn_gutters, spawn_scoreboard),
         )
         .add_systems(
             Update,
@@ -257,6 +279,49 @@ fn spawn_gutters(
     }
 }
 
+fn spawn_scoreboard(
+    mut commands: Commands,
+) {
+    commands.spawn((
+        PlayerScoreboard,
+        TextBundle::from_section(
+            "0",
+            TextStyle {
+                font_size: 72.0,
+                color: Color::WHITE,
+                ..default()
+            },
+        )
+        .with_text_justify(JustifyText::Center)
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            top: Val::Px(5.0),
+            right: Val::Px(15.0),
+            ..default()
+        })
+    ));
+
+    commands.spawn((
+        AiScoreboard,
+        TextBundle::from_section(
+            "0",
+            TextStyle {
+                font_size: 72.0,
+                color: Color::WHITE,
+                ..default()
+            },
+        )
+        .with_text_justify(JustifyText::Center)
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            top: Val::Px(5.0),
+            left: Val::Px(15.0),
+            ..default()
+        })
+    ));
+
+}
+
 fn move_ball(mut ball: Query<(&mut Position, &Velocity), With<Ball>>) {
     if let Ok((mut position, velocity)) = ball.get_single_mut() {
         position.0 += velocity.0
@@ -318,7 +383,7 @@ fn reset_ball(
     mut events: EventReader<Scored>,
 ) {
     // Here we read the events using an EventReader
-    for event in events.iter() {
+    for event in events.read() {
         if let Ok((mut position, mut velocity)) = ball.get_single_mut() {
             match event.0 {
                 Scorer::Ai => {
@@ -335,7 +400,7 @@ fn reset_ball(
 }
 
 fn update_score(mut score: ResMut<Score>, mut events: EventReader<Scored>) {
-    for event in events.iter() {
+    for event in events.read() {
         match event.0 {
             Scorer::Ai => score.ai += 1,
             Scorer::Player => score.player += 1,
