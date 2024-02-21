@@ -2,7 +2,7 @@ use bevy::{
     prelude::*,
     math::*,
     sprite::MaterialMesh2dBundle,
-    math::bounding::{Aabb2d, IntersectsVolume},
+    math::bounding::{Aabb2d, BoundingCircle, IntersectsVolume},
 };
 
 const BALL_SPEED: f32 = 5.;
@@ -10,6 +10,9 @@ const BALL_SIZE: f32 = 5.;
 
 #[derive(Component)]
 struct Player;
+
+#[derive(Component)]
+struct Ai;
 
 #[derive(Component)]
 struct Shape(Vec2);
@@ -22,6 +25,9 @@ struct Position(Vec2);
 
 #[derive(Component)]
 struct Ball;
+
+#[derive(Event, Default)]
+struct CollisionEvent;
 
 #[derive(Bundle)]
 struct BallBundle {
@@ -131,21 +137,28 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .init_resource::<Score>()
         .add_event::<Scored>()
+        .add_event::<CollisionEvent>()
         .add_systems(
             Startup,
             (spawn_ball, spawn_camera, spawn_paddles, spawn_gutters, spawn_scoreboard),
         )
+        .add_systems(FixedUpdate, 
+        (
+            move_ball,
+            move_ai,
+            handle_player_input,
+            move_paddles.after(handle_player_input),
+            project_positions.after(move_ball),
+            handle_collisions.after(move_ball),
+        ).chain(),
+        )
         .add_systems(
             Update,
             (
-                move_ball,
-                handle_player_input,
                 detect_scoring,
                 reset_ball.after(detect_scoring),
                 update_score.after(detect_scoring),
-                move_paddles.after(handle_player_input),
-                project_positions.after(move_ball),
-                handle_collisions.after(move_ball),
+                update_scoreboard.after(detect_scoring),
             ),
         )
         .run();
@@ -155,7 +168,7 @@ fn handle_player_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut paddle: Query<&mut Velocity, With<Player>>,
 ) {
-    if let Ok(mut velocity) = paddle.get_single_mut() {
+    if let Ok(mut velocity) = paddle.get_single_mut() {        
         if keyboard_input.pressed(KeyCode::ArrowUp) {
             velocity.0.y = 1.;
         } else if keyboard_input.pressed(KeyCode::ArrowDown) {
@@ -216,16 +229,17 @@ fn spawn_paddles(
         let left_paddle_material = ColorMaterial::from(Color::rgb(0., 0., 1.));
 
         commands.spawn((
+            Player,
             PaddleBundle::new(right_paddle_x, 0.),
             MaterialMesh2dBundle {
                 mesh: mesh_handle.clone().into(),
                 material: materials.add(right_paddle_material),
                 ..default()
             },
-            Player,
         ));
 
         commands.spawn((
+            Ai,
             PaddleBundle::new(left_paddle_x, 0.),
             MaterialMesh2dBundle {
                 mesh: mesh_handle.into(),
@@ -322,9 +336,25 @@ fn spawn_scoreboard(
 
 }
 
-fn move_ball(mut ball: Query<(&mut Position, &Velocity), With<Ball>>) {
+fn move_ball(
+    mut ball: Query<(&mut Position, &Velocity), With<Ball>>,
+    time : Res<Time>,
+            ) {
     if let Ok((mut position, velocity)) = ball.get_single_mut() {
-        position.0 += velocity.0
+        // make velocity accelerate over time with BALL_SPEED
+        position.0 += (velocity.0 * BALL_SPEED) + time.delta_seconds();
+    }
+}
+
+fn move_ai(
+    mut ai: Query<(&mut Velocity, &Position), With<Ai>>,
+    ball: Query<&Position, With<Ball>>,
+) {
+    if let Ok((mut velocity, position)) = ai.get_single_mut() {
+        if let Ok(ball_position) = ball.get_single() {
+            let a_to_b = ball_position.0 - position.0;
+            velocity.0.y = a_to_b.y.signum();
+        }
     }
 }
 
@@ -368,7 +398,6 @@ fn detect_scoring(
         let window_width = window.resolution.width();
 
         if let Ok(ball) = ball.get_single_mut() {
-            // Here we write the events using our EventWriter
             if ball.0.x > window_width / 2. {
                 events.send(Scored(Scorer::Ai));
             } else if ball.0.x < -window_width / 2. {
@@ -382,7 +411,6 @@ fn reset_ball(
     mut ball: Query<(&mut Position, &mut Velocity), With<Ball>>,
     mut events: EventReader<Scored>,
 ) {
-    // Here we read the events using an EventReader
     for event in events.read() {
         if let Ok((mut position, mut velocity)) = ball.get_single_mut() {
             match event.0 {
@@ -416,4 +444,12 @@ fn project_positions(
     for (mut transform, position) in &mut positionables {
         transform.translation = position.0.extend(0.);
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum Collision {
+    Left,
+    Right,
+    Top,
+    Bottom,
 }
