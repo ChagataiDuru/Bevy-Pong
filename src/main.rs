@@ -26,9 +26,6 @@ struct Position(Vec2);
 #[derive(Component)]
 struct Ball;
 
-#[derive(Event, Default)]
-struct CollisionEvent;
-
 #[derive(Bundle)]
 struct BallBundle {
     ball: Ball,
@@ -48,7 +45,7 @@ impl BallBundle {
     }
 }
 
-const PADDLE_SPEED: f32 = 1.;
+const PADDLE_SPEED: f32 = 6.;
 const PADDLE_WIDTH: f32 = 10.;
 const PADDLE_HEIGHT: f32 = 50.;
 
@@ -137,7 +134,6 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .init_resource::<Score>()
         .add_event::<Scored>()
-        .add_event::<CollisionEvent>()
         .add_systems(
             Startup,
             (spawn_ball, spawn_camera, spawn_paddles, spawn_gutters, spawn_scoreboard),
@@ -145,11 +141,11 @@ fn main() {
         .add_systems(FixedUpdate, 
         (
             move_ball,
+            project_positions.after(move_ball),
+            handle_collisions.after(move_ball),
             move_ai,
             handle_player_input,
             move_paddles.after(handle_player_input),
-            project_positions.after(move_ball),
-            handle_collisions.after(move_ball),
         ).chain(),
         )
         .add_systems(
@@ -198,7 +194,7 @@ fn spawn_ball(
     let material_handle = materials.add(material);
 
     commands.spawn((
-        BallBundle::new(1., 0.),
+        BallBundle::new(1., 1.),
         MaterialMesh2dBundle {
             mesh: mesh_handle.into(),
             material: material_handle,
@@ -267,7 +263,7 @@ fn spawn_gutters(
         let bottom_gutter = GutterBundle::new(0., bottom_gutter_y, window_width);
 
         let mesh = Mesh::from(Rectangle::new(top_gutter.shape.0.x, bottom_gutter.shape.0.y));
-        let material = ColorMaterial::from(Color::rgb(0., 0., 0.));
+        let material = ColorMaterial::from(Color::rgb(221., 221., 221.));
 
         // Sharing same mesh and material between top and bottom gutter (wow)
         let mesh_handle = meshes.add(mesh);
@@ -374,16 +370,68 @@ fn move_paddles(
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum Collision {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+fn collide_with_side(ball: BoundingCircle, other: Aabb2d) -> Option<Collision> {
+    if !ball.intersects(&other) {
+        return None;
+    }
+
+    let closest = other.closest_point(ball.center);
+    let offset = ball.center - closest;
+    let side = if offset.x > offset.y {
+        if offset.y < 0. {
+            Collision::Left
+        } else {
+            Collision::Right
+        }
+    } else if offset.x > 0. {
+        Collision::Top
+    } else {
+        Collision::Bottom
+    };
+    println!("Collided with side: {:?}", side);
+    Some(side)
+}
+
 fn handle_collisions(
-    mut ball: Query<(&mut Velocity, &Position, &Shape), With<Ball>>,
+    mut ball: Query<(&mut Velocity, &Position), With<Ball>>,
     others: Query<(&Position, &Shape), Without<Ball>>,
 ) {
-    if let Ok((mut ball_velocity, ball_position, ball_shape)) = ball.get_single_mut() {
+    if let Ok((mut ball_velocity, ball_position)) = ball.get_single_mut() {
         for (position, shape) in &others {
-            let collision = Aabb2d::new(ball_position.0.extend(0.).truncate(), ball_shape.0)
-                .intersects(&Aabb2d::new(position.0.extend(0.).truncate(), shape.0));
-            if collision {
-                ball_velocity.0.x *= -1.;
+            let collision = collide_with_side(
+                BoundingCircle::new(ball_position.0.extend(0.).truncate(), BALL_SIZE / 2.), 
+                Aabb2d::new(position.0.extend(0.).truncate(), shape.0));
+            if collision.is_some() {
+                if let Some(collision) = collision {
+
+                    // reflect the ball when it collides
+                    let mut reflect_x = false;
+                    let mut reflect_y = false;
+        
+                    // collision
+                    match collision {
+                        Collision::Left => reflect_x = ball_velocity.0.x > 0.0,
+                        Collision::Right => reflect_x = ball_velocity.0.x < 0.0,
+                        Collision::Top => reflect_y = ball_velocity.0.y < 0.0,
+                        Collision::Bottom => reflect_y = ball_velocity.0.y > 0.0,
+                    }
+        
+                    if reflect_x {
+                        ball_velocity.0.x = -ball_velocity.0.x;
+                    }
+        
+                    if reflect_y {
+                        ball_velocity.0.y = -ball_velocity.0.y;
+                    }
+                }
             }
         }
     }
@@ -434,8 +482,6 @@ fn update_score(mut score: ResMut<Score>, mut events: EventReader<Scored>) {
             Scorer::Player => score.player += 1,
         }
     }
-
-    println!("Score: {} - {}", score.player, score.ai);
 }
 
 fn project_positions(
@@ -446,10 +492,3 @@ fn project_positions(
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-enum Collision {
-    Left,
-    Right,
-    Top,
-    Bottom,
-}
