@@ -6,7 +6,7 @@ use bevy::{
 };
 
 const BALL_SPEED: f32 = 5.;
-const BALL_SIZE: f32 = 5.;
+const BALL_SIZE: f32 = 8.;
 
 #[derive(Component)]
 struct Player;
@@ -385,13 +385,13 @@ fn collide_with_side(ball: BoundingCircle, other: Aabb2d) -> Option<Collision> {
 
     let closest = other.closest_point(ball.center);
     let offset = ball.center - closest;
-    let side = if offset.x > offset.y {
-        if offset.y < 0. {
-            Collision::Left
-        } else {
+    let side = if offset.x.abs() > offset.y.abs() {
+        if offset.x > 0. {
             Collision::Right
+        } else {
+            Collision::Left
         }
-    } else if offset.x > 0. {
+    } else if offset.y > 0. {
         Collision::Top
     } else {
         Collision::Bottom
@@ -411,25 +411,12 @@ fn handle_collisions(
                 Aabb2d::new(position.0.extend(0.).truncate(), shape.0));
             if collision.is_some() {
                 if let Some(collision) = collision {
-
-                    // reflect the ball when it collides
-                    let mut reflect_x = false;
-                    let mut reflect_y = false;
-        
                     // collision
                     match collision {
-                        Collision::Left => reflect_x = ball_velocity.0.x > 0.0,
-                        Collision::Right => reflect_x = ball_velocity.0.x < 0.0,
-                        Collision::Top => reflect_y = ball_velocity.0.y < 0.0,
-                        Collision::Bottom => reflect_y = ball_velocity.0.y > 0.0,
-                    }
-        
-                    if reflect_x {
-                        ball_velocity.0.x = -ball_velocity.0.x;
-                    }
-        
-                    if reflect_y {
-                        ball_velocity.0.y = -ball_velocity.0.y;
+                        Collision::Left => ball_velocity.0.x = -ball_velocity.0.x.abs(),
+                        Collision::Right => ball_velocity.0.x = ball_velocity.0.x.abs(),
+                        Collision::Top => ball_velocity.0.y = ball_velocity.0.y.abs(),
+                        Collision::Bottom => ball_velocity.0.y = -ball_velocity.0.y.abs(),
                     }
                 }
             }
