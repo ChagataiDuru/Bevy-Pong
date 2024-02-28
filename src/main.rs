@@ -6,7 +6,7 @@ use bevy::{
 };
 
 const BALL_SPEED: f32 = 5.;
-const BALL_SIZE: f32 = 8.;
+const BALL_SIZE: f32 = 7.;
 
 #[derive(Component)]
 struct Player;
