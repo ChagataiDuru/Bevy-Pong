@@ -6,7 +6,7 @@ use bevy::{
 };
 
 const BALL_SPEED: f32 = 5.;
-const BALL_SIZE: f32 = 7.;
+const BALL_SIZE: f32 = 7.5;
 
 #[derive(Component)]
 struct Player;
@@ -38,7 +38,7 @@ impl BallBundle {
     fn new(x: f32, y: f32) -> Self {
         Self {
             ball: Ball,
-            shape: Shape(Vec2::new(BALL_SIZE, BALL_SIZE)),
+            shape: Shape(Vec2::splat(BALL_SIZE)),
             velocity: Velocity(Vec2::new(x, y)),
             position: Position(Vec2::new(0., 0.)),
         }
@@ -185,7 +185,7 @@ fn spawn_ball(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    println!("Spawning ball...");
+    info!("Spawning ball...");
 
     let mesh = Mesh::from(Circle::new(BALL_SIZE));
     let material = ColorMaterial::from(Color::rgb(1., 0., 0.));
@@ -209,7 +209,7 @@ fn spawn_paddles(
     mut materials: ResMut<Assets<ColorMaterial>>,
     window: Query<&Window>,
 ) {
-    println!("Spawning paddles...");
+    info!("Spawning paddles...");
 
     if let Ok(window) = window.get_single() {
         let window_width = window.resolution.width();
@@ -396,7 +396,7 @@ fn collide_with_side(ball: BoundingCircle, other: Aabb2d) -> Option<Collision> {
     } else {
         Collision::Bottom
     };
-    println!("Collided with side: {:?}", side);
+    info!("Collided with side: {:?}", side);
     Some(side)
 }
 
@@ -409,15 +409,13 @@ fn handle_collisions(
             let collision = collide_with_side(
                 BoundingCircle::new(ball_position.0.extend(0.).truncate(), BALL_SIZE / 2.), 
                 Aabb2d::new(position.0.extend(0.).truncate(), shape.0));
-            if collision.is_some() {
-                if let Some(collision) = collision {
-                    // collision
-                    match collision {
-                        Collision::Left => ball_velocity.0.x = -ball_velocity.0.x.abs(),
-                        Collision::Right => ball_velocity.0.x = ball_velocity.0.x.abs(),
-                        Collision::Top => ball_velocity.0.y = ball_velocity.0.y.abs(),
-                        Collision::Bottom => ball_velocity.0.y = -ball_velocity.0.y.abs(),
-                    }
+            if let Some(collision) = collision {
+                // collision
+                match collision {
+                    Collision::Left => ball_velocity.0.x = -ball_velocity.0.x.abs(),
+                    Collision::Right => ball_velocity.0.x = ball_velocity.0.x.abs(),
+                    Collision::Top => ball_velocity.0.y = ball_velocity.0.y.abs(),
+                    Collision::Bottom => ball_velocity.0.y = -ball_velocity.0.y.abs(),
                 }
             }
         }
