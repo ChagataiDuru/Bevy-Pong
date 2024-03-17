@@ -6,7 +6,7 @@ use bevy::{
 };
 
 const BALL_SPEED: f32 = 5.;
-const BALL_SIZE: f32 = 7.5;
+const BALL_SIZE: f32 = 8.;
 
 #[derive(Component)]
 struct Player;
@@ -141,11 +141,11 @@ fn main() {
         .add_systems(FixedUpdate, 
         (
             move_ball,
-            project_positions.after(move_ball),
-            handle_collisions.after(move_ball),
             move_ai,
+            project_positions,
+            handle_collisions,
             handle_player_input,
-            move_paddles.after(handle_player_input),
+            move_paddles
         ).chain(),
         )
         .add_systems(
@@ -476,4 +476,3 @@ fn project_positions(
         transform.translation = position.0.extend(0.);
     }
 }
-
